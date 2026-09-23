@@ -1,0 +1,13 @@
+{
+  "name": "quickrip",
+  "version": "0.1.0",
+  "private": true,
+  "description": "quickRIP: screen-print color separations with halftones, as a Photoshop plugin",
+  "license": "UNLICENSED",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "samples": "node tools/make-samples.js",
+    "sep": "node tools/cli.js"
+  },
+  "engines": { "node": ">=18" }
+}

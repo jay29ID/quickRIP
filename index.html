@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { color: var(--uxp-host-text-color); font-size: var(--uxp-host-font-size); padding: 8px; }
+    h2 { font-size: 13px; margin: 12px 0 6px; }
+    .row { display: flex; align-items: center; margin: 4px 0; }
+    .row label { width: 90px; }
+    .row input, .row select { flex: 1; }
+    .swatches { display: flex; flex-direction: column; }
+    .swatch { display: flex; align-items: center; margin: 2px 0; }
+    .chip { width: 18px; height: 18px; border: 1px solid #888; margin-right: 6px; }
+    .muted { opacity: 0.7; }
+    button { margin-top: 8px; width: 100%; }
+    #status { margin-top: 8px; min-height: 16px; }
+  </style>
+</head>
+<body>
+  <h2>1. Artwork</h2>
+  <div class="row"><label for="shirt">Shirt color</label><input id="shirt" type="text" value="FFFFFF" /></div>
+  <button id="analyze">Count colors</button>
+  <div id="suggest" class="muted"></div>
+
+  <h2>2. Screens</h2>
+  <div class="row">
+    <label for="count">Colors</label>
+    <select id="count">
+      <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+      <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+      <option value="7">7</option>
+    </select>
+  </div>
+  <div class="row"><label for="base">Base screen</label><input id="base" type="checkbox" /></div>
+  <div id="swatches" class="swatches"></div>
+
+  <h2>3. Halftone</h2>
+  <div class="row"><label for="lpi">LPI</label><input id="lpi" type="number" value="36" /></div>
+  <div class="row"><label for="angle">Angle</label><input id="angle" type="number" value="22.5" /></div>
+  <div class="row">
+    <label for="dot">Dot</label>
+    <select id="dot">
+      <option value="round">Round</option><option value="ellipse">Ellipse</option>
+      <option value="square">Square</option><option value="diamond">Diamond</option>
+      <option value="line">Line</option>
+    </select>
+  </div>
+  <div class="row"><label for="filmPpi">Film PPI</label><input id="filmPpi" type="number" placeholder="auto (300+)" /></div>
+  <div class="row">
+    <label for="layerColor">Layers in</label>
+    <select id="layerColor"><option value="ink">Ink colors</option><option value="black">Black (film)</option></select>
+  </div>
+
+  <button id="separate">Separate</button>
+  <div id="status" class="muted"></div>
+
+  <script src="index.js"></script>
+</body>
+</html>
