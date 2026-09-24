@@ -12,13 +12,22 @@
     .swatch { display: flex; align-items: center; margin: 2px 0; }
     .chip { width: 18px; height: 18px; border: 1px solid #888; margin-right: 6px; }
     .muted { opacity: 0.7; }
+    .presets { margin-left: 90px; }
+    .preset { width: 22px; height: 22px; border: 1px solid #888; margin-right: 6px; cursor: pointer; }
+    .preset.active { border: 2px solid var(--uxp-host-link-text-color, #2d8ceb); }
     button { margin-top: 8px; width: 100%; }
     #status { margin-top: 8px; min-height: 16px; }
   </style>
 </head>
 <body>
   <h2>1. Artwork</h2>
-  <div class="row"><label for="shirt">Shirt color</label><input id="shirt" type="text" value="FFFFFF" /></div>
+  <div class="row"><label for="shirt">Shirt color</label><input id="shirt" type="text" value="000000" /></div>
+  <div class="row presets">
+    <div class="preset" data-hex="000000" title="Black" style="background-color: #000000"></div>
+    <div class="preset" data-hex="FFFFFF" title="White" style="background-color: #FFFFFF"></div>
+    <div class="preset" data-hex="1F2A44" title="Navy" style="background-color: #1F2A44"></div>
+    <div class="preset" data-hex="C8102E" title="Red" style="background-color: #C8102E"></div>
+  </div>
   <button id="analyze">Count colors</button>
   <div id="suggest" class="muted"></div>
 
@@ -31,7 +40,7 @@
       <option value="7">7</option>
     </select>
   </div>
-  <div class="row"><label for="base">Base screen</label><input id="base" type="checkbox" /></div>
+  <div class="row"><label for="base">Base screen</label><input id="base" type="checkbox" checked /></div>
   <div id="swatches" class="swatches"></div>
 
   <h2>3. Halftone</h2>

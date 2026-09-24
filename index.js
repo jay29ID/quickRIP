@@ -12,7 +12,7 @@ function shirtColor() {
   try {
     return E.parseHex($('shirt').value.trim());
   } catch (e) {
-    throw new Error('Shirt color should be a hex code like FFFFFF or 141414.');
+    throw new Error('Shirt color should be a hex code like 000000 or FFFFFF.');
   }
 }
 
@@ -61,6 +61,34 @@ $('analyze').addEventListener('click', async () => {
     status(e.message);
   }
 });
+
+// Shirt color presets. Changing the shirt invalidates the color count and
+// flips the base screen on for dark shirts.
+function onShirtChange() {
+  const hex = $('shirt').value.trim().replace('#', '').toUpperCase();
+  document.querySelectorAll('.preset').forEach((el) => {
+    el.classList.toggle('active', el.dataset.hex === hex);
+  });
+  try {
+    $('base').checked = E.rgbToLab(...E.parseHex(hex))[0] < 50;
+  } catch (e) {
+    return; // half-typed hex code
+  }
+  if (analysis && analysis.substrate.hex !== `#${hex}`) {
+    analysis = null;
+    $('suggest').textContent = 'Shirt changed: count colors again.';
+    $('swatches').innerHTML = '';
+  }
+}
+
+document.querySelectorAll('.preset').forEach((el) => {
+  el.addEventListener('click', () => {
+    $('shirt').value = el.dataset.hex;
+    onShirtChange();
+  });
+});
+$('shirt').addEventListener('input', onShirtChange);
+onShirtChange();
 
 $('count').addEventListener('change', showSwatches);
 
