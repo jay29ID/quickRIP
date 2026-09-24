@@ -8,6 +8,8 @@ const { analyzeColors, pickInks, MAX_COLOR_SCREENS } = require('./analyze.js');
 const { separate, recomposite, createInkClassifier } = require('./separate.js');
 const { halftone, createHalftoner, SPOT_FUNCTIONS } = require('./halftone.js');
 const { makeUnderbase } = require('./underbase.js');
+const { detectBackground } = require('./background.js');
+const { planSheet, sheetMarks, renderSheetRows, screenLabel, SHEET_DEFAULTS } = require('./sheet.js');
 
 /**
  * Plans the screens for an image: which inks, in what print order.
@@ -41,7 +43,8 @@ function planScreens(image, options = {}) {
   order.forEach(({ ink, inkIndex }, i) => {
     screens.push({ name: `Color ${i + 1} ${ink.hex}`, kind: 'color', hex: ink.hex, rgb: ink.rgb, inkIndex });
   });
-  return { analysis, inks, underbase, substrate, screens };
+  const background = analysis ? analysis.background : detectBackground(image, substrate);
+  return { analysis, inks, underbase, substrate, background, screens };
 }
 
 function withLab(ink) {
@@ -53,7 +56,7 @@ function withLab(ink) {
  * Density map (0..255) for every screen in a plan, in the plan's order.
  */
 function screenDensities(image, plan, options = {}) {
-  const sep = separate(image, plan.inks, { substrate: plan.substrate });
+  const sep = separate(image, plan.inks, { substrate: plan.substrate, background: plan.background });
   return plan.screens.map((s) =>
     s.kind === 'base'
       ? makeUnderbase(sep.densities, image.width, image.height, { chokePx: options.chokePx ?? 1 })
@@ -73,6 +76,12 @@ module.exports = {
   halftone,
   createHalftoner,
   makeUnderbase,
+  detectBackground,
+  planSheet,
+  sheetMarks,
+  renderSheetRows,
+  screenLabel,
+  SHEET_DEFAULTS,
   DOT_SHAPES: Object.keys(SPOT_FUNCTIONS),
   MAX_COLOR_SCREENS,
 };

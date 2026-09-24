@@ -1,6 +1,6 @@
 'use strict';
 
-const { rgbToLab, tintOf } = require('./color.js');
+const { rgbToLab, tintOf, deltaE } = require('./color.js');
 
 /**
  * Builds a function that maps an sRGB color to (ink index, tint 0..1).
@@ -12,8 +12,11 @@ const { rgbToLab, tintOf } = require('./color.js');
  *
  * Results are memoized per 24-bit color, so big images stay fast.
  */
-function createInkClassifier(inks, substrateRgb) {
+function createInkClassifier(inks, substrateRgb, options = {}) {
   const inkRgbs = inks.map((ink) => ink.rgb);
+  // Colors that print nothing, e.g. a painted-in shirt background.
+  const knockouts = (options.knockouts || []).map((rgb) => rgbToLab(rgb[0], rgb[1], rgb[2]));
+  const knockoutDeltaE = options.knockoutDeltaE ?? 6;
   if (inkRgbs.length > 254) throw new Error('At most 254 inks are supported');
 
   // cache entry: 0 = not computed, else ((inkIndex + 1) << 8) | tint(0..255)
@@ -24,6 +27,9 @@ function createInkClassifier(inks, substrateRgb) {
 
   /** Best ink for a color given as sRGB plus its Lab. */
   function classify(pixRgb, pixLab) {
+    for (const k of knockouts) {
+      if (deltaE(pixLab, k) < knockoutDeltaE) return { ink: 0, t: 0, residual: 0, knockedOut: true };
+    }
     let best = -1;
     let bestRes = Infinity;
     let bestT = 0;
@@ -66,14 +72,16 @@ function createInkClassifier(inks, substrateRgb) {
  * returns: { width, height, densities: Uint8Array[] } with 0 = no ink, 255 = solid
  *
  * Semi-transparent pixels are composited over the substrate first, so a
- * transparent background prints nothing.
+ * transparent background prints nothing. options.background (from
+ * detectBackground) is a painted-in background that also prints nothing.
  */
 function separate(image, inks, options = {}) {
   const substrate = options.substrate || [255, 255, 255];
   const { width, height, data } = image;
   const channels = image.channels || 4;
   const n = width * height;
-  const classifier = options.classifier || createInkClassifier(inks, substrate);
+  const knockouts = options.background ? [options.background.rgb || options.background] : [];
+  const classifier = options.classifier || createInkClassifier(inks, substrate, { knockouts });
   const densities = inks.map(() => new Uint8Array(n));
   const [sr, sg, sb] = substrate;
 

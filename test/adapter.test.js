@@ -105,12 +105,12 @@ test('Photoshop adapter builds a seps document with one layer per screen', async
   const analysis = await adapter.analyzeActiveDocument({ substrate: F.SHIRT_BLACK });
   assert.equal(analysis.suggestedCount, 2);
 
-  const result = await adapter.separateActiveDocument({ substrate: F.SHIRT_BLACK, inkCount: 2, filmPpi: 300 });
+  const result = await adapter.separateActiveDocument({ substrate: F.SHIRT_BLACK, inkCount: 2, filmPpi: 300, sheet: false });
   assert.equal(docs.length, 1);
   const doc = docs[0];
   assert.equal(doc.width, art.width * 2);
   assert.equal(doc.resolution, 300);
-  assert.deepEqual(doc.layers.map((l) => l.name), ['Shirt', 'Base', 'Color 1 #FFD100', 'Color 2 #FFFFFF']);
+  assert.deepEqual(doc.layers.map((l) => l.name), ['Shirt', '1/3 Base', '2/3 Color 1 #FFD100', '3/3 Color 2 #FFFFFF']);
   assert.equal(result.plan.screens.length, 3);
 
   // Center of the yellow circle: base and yellow screens both inked, white screen empty.
@@ -126,7 +126,8 @@ test('Photoshop adapter builds a seps document with one layer per screen', async
 test('Photoshop adapter can output black film layers', async () => {
   const { ps, docs } = fakePhotoshop(F.spot3(), 300);
   const adapter = loadAdapter(ps);
-  await adapter.separateActiveDocument({ inkCount: 3, layerColor: 'black' });
+  await adapter.separateActiveDocument({ inkCount: 3, layerColor: 'black', sheet: false });
+  assert.equal(docs[0].layers[0].visible, false); // shirt layer hidden for film
   const layers = docs[0].layers.slice(1);
   assert.equal(layers.length, 3);
   for (const l of layers) {
@@ -139,4 +140,36 @@ test('Photoshop adapter can output black film layers', async () => {
     }
     assert.ok(inked > 0, `${l.name} is empty`);
   }
+});
+
+test('Photoshop adapter lays screens out on 13 x 19 film sheets by default', async () => {
+  const art = F.spot3(); // 600 x 400 px at 150 ppi = 4 x 2.67 in
+  const { ps, docs } = fakePhotoshop(art, 150);
+  const adapter = loadAdapter(ps);
+  const result = await adapter.separateActiveDocument({ inkCount: 3, filmPpi: 300, layerColor: 'black' });
+  const doc = docs[0];
+  assert.equal(doc.width, 13 * 300);
+  assert.equal(doc.height, 19 * 300);
+  const { artLeft, artTop } = result.layout;
+  assert.equal(artLeft, (3900 - 1200) / 2);
+  assert.equal(artTop, 375);
+  const alpha = (layer, x, y) => layer.pixels[(y * doc.width + x) * 4 + 3];
+  for (const layer of doc.layers.slice(1)) {
+    // Registration target crosshair centered above the art, on every film.
+    assert.equal(alpha(layer, artLeft + 600, artTop - 135), 255, layer.name);
+    // Crop mark tick above the top-left corner of the art.
+    assert.equal(alpha(layer, artLeft, artTop - 60), 255, layer.name);
+    // Nothing printed outside art and top band.
+    assert.equal(alpha(layer, 10, 5000), 0);
+  }
+  // Labels differ per screen: compare the label band of two films.
+  const band = (layer) => layer.pixels.subarray(80 * doc.width * 4, 130 * doc.width * 4);
+  assert.notDeepEqual(Buffer.from(band(doc.layers[1])), Buffer.from(band(doc.layers[2])));
+});
+
+test('Photoshop adapter refuses art too big for the sheet', async () => {
+  const art = F.spot3();
+  const { ps } = fakePhotoshop(art, 40); // 600 px at 40 ppi = 15 in wide
+  const adapter = loadAdapter(ps);
+  await assert.rejects(adapter.separateActiveDocument({ inkCount: 3, filmPpi: 300 }), /13 x 19 sheet holds up to 12.5/);
 });

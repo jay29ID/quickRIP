@@ -64,6 +64,9 @@ async function analyzeActiveDocument(settings = {}) {
  *   lpi, angle, dot, minDot, maxDot   halftone settings (default 36 lpi, 22.5 deg, round)
  *   filmPpi      output resolution (default: document resolution, at least 300)
  *   layerColor   'ink' (colored preview) or 'black' (film-ready)
+ *   sheet        true (default): lay each screen out on a 13 x 19 in film sheet
+ *                with crop marks and a label; false: document is the art size
+ *   sheetSize    { widthIn, heightIn } to override 13 x 19
  */
 async function separateActiveDocument(settings = {}, onProgress = () => {}) {
   return core.executeAsModal(
@@ -102,8 +105,22 @@ async function separateActiveDocument(settings = {}, onProgress = () => {}) {
         inputPpi: ppi,
         outputPpi: filmPpi,
       };
-      const width = Math.round(image.width * (filmPpi / ppi));
-      const height = Math.round(image.height * (filmPpi / ppi));
+      const artWidth = Math.round(image.width * (filmPpi / ppi));
+      const artHeight = Math.round(image.height * (filmPpi / ppi));
+      const useSheet = settings.sheet !== false;
+      const layout = useSheet
+        ? E.planSheet(artWidth, artHeight, filmPpi, settings.sheetSize)
+        : { width: artWidth, height: artHeight, artLeft: 0, artTop: 0, artWidth, artHeight, fits: true };
+      if (!layout.fits) {
+        const o = layout.options;
+        throw new Error(
+          `The art is ${inches(artWidth, filmPpi)} x ${inches(artHeight, filmPpi)} in, but a ${o.widthIn} x ${o.heightIn} sheet ` +
+            `holds up to ${layout.maxArtIn.width.toFixed(1)} x ${layout.maxArtIn.height.toFixed(1)} in. ` +
+            'Scale the art down or turn off the film sheet.'
+        );
+      }
+      const { width, height } = layout;
+      const job = stripExtension(doc.title);
 
       const sepDoc = await app.documents.add({
         width,
@@ -111,37 +128,49 @@ async function separateActiveDocument(settings = {}, onProgress = () => {}) {
         resolution: filmPpi,
         mode: constants.NewDocumentMode.RGB,
         fill: constants.DocumentFill.WHITE,
-        name: `${stripExtension(doc.title)} seps`,
+        name: `${job} seps`,
       });
 
       const suspension = await ctx.hostControl.suspendHistory({ documentID: sepDoc.id, name: 'quickRIP separations' });
+      const film = settings.layerColor === 'black';
       try {
-        await fillLayer(sepDoc, 'Shirt', width, height, substrate);
-        for (let i = 0; i < plan.screens.length; i++) {
+        const shirt = await fillLayer(sepDoc, 'Shirt', width, height, substrate);
+        if (film) shirt.visible = false; // films print on clear stock
+        const total = plan.screens.length;
+        for (let i = 0; i < total; i++) {
           if (ctx.isCancelled) throw new Error('Cancelled');
           const screen = plan.screens[i];
-          progress(0.25 + (0.75 * i) / plan.screens.length, `Screening ${screen.name}`);
-          const rgb = settings.layerColor === 'black' ? [0, 0, 0] : screen.rgb;
+          progress(0.25 + (0.75 * i) / total, `Screening ${screen.name}`);
+          const rgb = film ? [0, 0, 0] : screen.rgb;
           const halftoner = E.createHalftoner(densities[i], image.width, image.height, htOpts);
-          await writeScreenLayer(sepDoc, screen.name, halftoner, rgb);
+          const renderRows = useSheet
+            ? (() => {
+                const marks = E.sheetMarks(layout, E.screenLabel(job, screen, i, total, htOpts));
+                return (y0, y1) => E.renderSheetRows(layout, halftoner, marks, y0, y1);
+              })()
+            : halftoner.renderRows;
+          await writeScreenLayer(sepDoc, `${i + 1}/${total} ${screen.name}`, width, height, renderRows, rgb);
         }
       } finally {
         await ctx.hostControl.resumeHistory(suspension);
       }
       progress(1, 'Done');
-      return { plan, filmPpi, width, height, documentID: sepDoc.id };
+      return { plan, filmPpi, width, height, layout, documentID: sepDoc.id };
     },
     { commandName: 'quickRIP: separate' }
   );
 }
 
-/** Adds a layer and writes a halftoned screen into it, strip by strip. */
-async function writeScreenLayer(doc, name, halftoner, rgb) {
+/**
+ * Adds a layer and writes a screen into it, strip by strip.
+ * renderRows(y0, y1) returns that strip's mask (255 = ink).
+ */
+async function writeScreenLayer(doc, name, width, height, renderRows, rgb) {
   const layer = await doc.createPixelLayer({ name, blendMode: constants.BlendMode.NORMAL, opacity: 100 });
-  const { width, height } = halftoner;
   for (let y0 = 0; y0 < height; y0 += STRIP_ROWS) {
     const y1 = Math.min(height, y0 + STRIP_ROWS);
-    const mask = halftoner.renderRows(y0, y1);
+    const mask = renderRows(y0, y1);
+    if (mask.indexOf(255) === -1) continue; // blank film: nothing to write
     const buf = new Uint8Array(mask.length * 4);
     for (let p = 0; p < mask.length; p++) {
       if (mask[p] === 0) continue;
@@ -194,6 +223,10 @@ async function putStrip(doc, layer, buf, width, y0, y1) {
   } finally {
     imageData.dispose();
   }
+}
+
+function inches(px, ppi) {
+  return (px / ppi).toFixed(1);
 }
 
 function stripExtension(title) {

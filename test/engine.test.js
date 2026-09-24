@@ -160,3 +160,34 @@ function countBlobs(data, w, h) {
   }
   return count;
 }
+
+test('film sheet: art centered under the marks, label readable width', () => {
+  const layout = E.planSheet(3000, 3600, 300);
+  assert.equal(layout.width, 3900);
+  assert.equal(layout.height, 5700);
+  assert.equal(layout.artLeft, 450);
+  assert.ok(layout.fits);
+  assert.ok(!E.planSheet(3800, 3600, 300).fits); // wider than 12.5 in
+  assert.ok(!E.planSheet(3000, 5400, 300).fits); // taller than 17.5 in
+
+  const marks = E.sheetMarks(layout, 'JOB | 1 OF 3 | BASE | 36 LPI 22.5 DEG ROUND');
+  // Every mark and every letter sits above the art.
+  for (const r of marks.rects) assert.ok(r.y1 <= layout.artTop + 2, JSON.stringify(r));
+  const solid = { width: 3000, height: 3600, renderRows: (a, b) => new Uint8Array(3000 * (b - a)).fill(255) };
+  const rows = E.renderSheetRows(layout, solid, marks, 0, layout.artTop + 10);
+  // Art starts exactly at artTop / artLeft.
+  assert.equal(rows[layout.artTop * 3900 + 450], 255);
+  assert.equal(rows[layout.artTop * 3900 + 449], 0);
+  assert.equal(rows[(layout.artTop - 1) * 3900 + 1000], 0);
+});
+
+test('off-black art background on a black shirt prints nothing', () => {
+  // Art mocked up on #141414 while the shirt is set to pure black.
+  const img = F.darkShirt();
+  const plan = E.planScreens(img, { substrate: [0, 0, 0] });
+  assert.equal(plan.background.hex, '#141414');
+  assert.deepEqual(hexes(plan.inks), ['#FFD100', '#FFFFFF']);
+  const dens = E.screenDensities(img, plan);
+  const corner = 10 * img.width + 10;
+  for (const d of dens) assert.equal(d[corner], 0);
+});

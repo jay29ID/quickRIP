@@ -105,6 +105,7 @@ $('separate').addEventListener('click', async () => {
       dot: $('dot').value,
       filmPpi: Number($('filmPpi').value) || undefined,
       layerColor: $('layerColor').value,
+      sheet: $('sheet').value === '13x19',
     };
     const result = await separateActiveDocument(settings, (v, text) => status(`${text}… ${Math.round(v * 100)}%`));
     status(`Done: ${result.plan.screens.length} screens at ${settings.lpi} lpi, ${result.filmPpi} ppi.`);

@@ -4,7 +4,9 @@
 // Runs the quickRIP engine on a PNG outside Photoshop.
 //
 //   node tools/cli.js art.png [--colors 4] [--shirt 141414] [--base] [--lpi 36]
-//                     [--angle 22.5] [--dot round] [--ppi 300] [--film-ppi 360] [--out dir]
+//                     [--angle 22.5] [--dot round] [--ppi 300] [--film-ppi 360] [--sheet] [--out dir]
+//
+// --sheet puts each film on a 13 x 19 in sheet with crop marks and a label.
 //
 // Writes one film positive per screen (black = ink), a halftoned preview of
 // the print, and analysis.json with the color count and fit per screen count.
@@ -21,6 +23,7 @@ function parseArgs(argv) {
     if (!a.startsWith('--')) args._.push(a);
     else if (a === '--base') args.base = true;
     else if (a === '--no-base') args.base = false;
+    else if (a === '--sheet') args.sheet = true;
     else args[a.slice(2)] = argv[++i];
   }
   return args;
@@ -61,8 +64,16 @@ function main() {
     inputPpi: ppi,
     outputPpi: filmPpi,
   };
+  const job = path.basename(input, '.png');
   const films = plan.screens.map((screen, i) => {
-    const ht = E.halftone(densities[i], image.width, image.height, htOpts);
+    let ht = E.halftone(densities[i], image.width, image.height, htOpts);
+    if (args.sheet) {
+      const layout = E.planSheet(ht.width, ht.height, filmPpi);
+      if (!layout.fits) throw new Error(`Art does not fit on a 13 x 19 sheet (max ${layout.maxArtIn.width} x ${layout.maxArtIn.height} in)`);
+      const marks = E.sheetMarks(layout, E.screenLabel(job, screen, i, plan.screens.length, htOpts));
+      const src = { width: ht.width, renderRows: (a, b) => ht.data.subarray(a * ht.width, b * ht.width) };
+      ht = { width: layout.width, height: layout.height, data: E.renderSheetRows(layout, src, marks, 0, layout.height) };
+    }
     const film = new Uint8Array(ht.data.length);
     for (let p = 0; p < film.length; p++) film[p] = 255 - ht.data[p];
     const file = `${String(i + 1).padStart(2, '0')}-${screen.kind === 'base' ? 'base' : screen.hex.slice(1)}.png`;

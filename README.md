@@ -24,6 +24,17 @@ Your original document is never touched. The output is a new document named
 "<art> seps" with a Shirt layer, then one layer per screen in print order: base
 first, then light to dark, with highlight white last on dark shirts.
 
+By default each screen is laid out on a **13 x 19 in film sheet**, ready to print
+one layer at a time. The art is centered and starts 1.25 in down. Above it are
+crop marks at the art's top corners, a registration target, and a label such as
+`JOB | 2 OF 4 | COLOR 1 #FFD100 | 36 LPI 22.5 DEG ROUND`. Art bigger than
+12.5 x 17.5 in is refused. Layers default to black for film. Pick "Ink colors"
+for a colored preview, or "Art size" to skip the sheet.
+
+The shirt color defaults to black, with black, white, navy and red presets. If
+the art sits on a painted background close to the shirt color (a mockup on
+#141414, say), that background is treated as shirt and prints nothing.
+
 ## Install for development
 
 1. Install the **UXP Developer Tool** from Creative Cloud.
@@ -38,7 +49,7 @@ Needs Photoshop 2023 (24.2) or newer.
 npm test                               # engine and plugin tests
 npm run samples                        # writes sample art to samples/
 node tools/cli.js samples/spot3.png    # films + preview + analysis.json
-node tools/cli.js art.png --colors 4 --shirt 141414 --film-ppi 600
+node tools/cli.js art.png --colors 4 --shirt 000000 --film-ppi 600 --sheet
 ```
 
 The CLI reads 8-bit PNGs. It writes one film per screen (black = ink), a
@@ -52,6 +63,8 @@ inks for each count.
   - `separate.js` splits pixels into per-ink density maps
   - `halftone.js` handles AM screening: lpi, angle, dot shape, min/max dot
   - `underbase.js` builds the base screen
+  - `background.js` spots a painted-in shirt background
+  - `sheet.js` and `font.js` handle the 13 x 19 film layout, marks and labels
 - `src/photoshop/adapter.js`: reads the document and writes the separations document.
 - `index.html`, `index.js`: the panel.
 - `tools/`: CLI and a dependency-free PNG reader/writer.

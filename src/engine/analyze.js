@@ -2,6 +2,7 @@
 
 const { rgbToLab, labToRgb, deltaE, toHex, tintOf } = require('./color.js');
 const { createInkClassifier } = require('./separate.js');
+const { detectBackground } = require('./background.js');
 
 // Jason's press: 8 heads, one kept for the base, so 7 color screens max.
 const MAX_COLOR_SCREENS = 7;
@@ -41,7 +42,10 @@ function analyzeColors(image, options = {}) {
   const substrate = opts.substrate;
   const subLab = rgbToLab(substrate[0], substrate[1], substrate[2]);
 
-  const { bins, total, substrateWeight } = histogram(image, opts, subLab);
+  // A painted-in background near the shirt color counts as shirt, not ink.
+  const background = opts.background !== undefined ? opts.background : detectBackground(image, substrate);
+  const bgLab = background ? rgbToLab(...background.rgb) : null;
+  const { bins, total, substrateWeight } = histogram(image, opts, subLab, bgLab);
   const inkWeight = total - substrateWeight;
   if (bins.length === 0 || inkWeight / total < 1e-4) {
     return emptyResult(opts, total);
@@ -71,6 +75,7 @@ function analyzeColors(image, options = {}) {
 
   return {
     substrate: { rgb: substrate.slice(), hex: toHex(substrate) },
+    background,
     darkSubstrate: subLab[0] < 50,
     candidates: candidates.map(publicInk),
     fits: fits.map((f) => f && { ...f, inks: f.inks.map(publicInk) }),
@@ -104,6 +109,7 @@ function publicInk(c) {
 function emptyResult(opts, total) {
   return {
     substrate: { rgb: opts.substrate.slice(), hex: toHex(opts.substrate) },
+    background: null,
     darkSubstrate: false,
     candidates: [],
     fits: [],
@@ -117,7 +123,7 @@ function emptyResult(opts, total) {
  * 15-bit color histogram of a pixel sample. Each bin keeps its mean color so
  * precision isn't lost to the 5-bit quantization.
  */
-function histogram(image, opts, subLab) {
+function histogram(image, opts, subLab, bgLab) {
   const { width, height, data } = image;
   const channels = image.channels || 4;
   const n = width * height;
@@ -155,7 +161,7 @@ function histogram(image, opts, subLab) {
     if (w === 0) continue;
     const rgb = [sum[key * 3] / w, sum[key * 3 + 1] / w, sum[key * 3 + 2] / w];
     const lab = rgbToLab(rgb[0], rgb[1], rgb[2]);
-    if (deltaE(lab, subLab) < opts.substrateDeltaE) {
+    if (deltaE(lab, subLab) < opts.substrateDeltaE || (bgLab && deltaE(lab, bgLab) < 6)) {
       substrateWeight += w;
       continue;
     }
@@ -327,14 +333,22 @@ function refineInks(inks, bins, substrate, subLab) {
       list.sort((a, b) => deltaE(b.lab, subLab) - deltaE(a.lab, subLab));
       let wTotal = 0;
       for (const b of list) wTotal += b.w;
+      // Full strength = the strongest colors this ink prints: those within 93%
+      // of its (outlier-proof) strongest color's distance from the shirt.
+      let dRef = deltaE(list[0].lab, subLab);
+      for (let k = 0, cw = 0; k < list.length; k++) {
+        cw += list[k].w;
+        dRef = deltaE(list[k].lab, subLab);
+        if (cw >= wTotal * 0.02) break;
+      }
       const acc = [0, 0, 0];
       let w = 0;
       for (const b of list) {
+        if (w > 0 && deltaE(b.lab, subLab) < 0.93 * dRef) break;
         acc[0] += b.rgb[0] * b.w;
         acc[1] += b.rgb[1] * b.w;
         acc[2] += b.rgb[2] * b.w;
         w += b.w;
-        if (w >= wTotal * 0.15) break;
       }
       const rgb = acc.map((v) => Math.round(v / w));
       return { rgb, lab: rgbToLab(rgb[0], rgb[1], rgb[2]), w: wTotal };
